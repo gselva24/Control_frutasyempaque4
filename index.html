@@ -78,7 +78,7 @@
                     </div>
                     
                     <div class="pt-4 text-center">
-                        <span id="chrono-display" class="text-5xl font-mono font-black text-slate-500 block mb-4">00:00:00</span>
+                        <span id="chrono-display" class="text-5xl font-mono font-black text-emerald-400 hidden mb-4">00:00:00</span>
                         <button id="btn-start" onclick="startTimer()" class="w-full bg-emerald-600 text-white font-black py-4 rounded-xl text-xs uppercase shadow-lg shadow-emerald-900/30">Iniciar Proceso</button>
                         <button id="btn-stop" onclick="stopTimer()" class="w-full bg-rose-600 text-white font-black py-4 rounded-xl text-xs uppercase hidden shadow-lg shadow-rose-900/30">Detener Cronómetro</button>
                     </div>
@@ -162,6 +162,7 @@
     </nav>
 
     <script>
+        // Recuerda sustituir esta URL con la correspondiente de tu nueva versión de Apps Script si llega a cambiar
         const GOOGLE_SHEETS_URL = "https://script.google.com/macros/s/AKfycbxXmVASphOh4iL101HAbp4uGVZufDwaXRS7yXGZNG74Y_nDOb9vmaFSi3c9cmldJPm40A/exec"; 
         const GERENTE_PASSWORD = "PRODUCCION2026";
 
@@ -238,14 +239,23 @@
             startTime = new Date();
             document.getElementById('btn-start').classList.add('hidden');
             document.getElementById('btn-stop').classList.remove('hidden');
-            document.getElementById('chrono-display').className = "text-5xl font-mono font-black text-emerald-400 block mb-4";
+            
+            // Condición de visualización: El cronómetro en pantalla solo se muestra si es el Gerente legítimo
+            if (isAdmin) {
+                document.getElementById('chrono-display').classList.remove('hidden');
+                document.getElementById('chrono-display').className = "text-5xl font-mono font-black text-emerald-400 block mb-4";
+            } else {
+                document.getElementById('chrono-display').classList.add('hidden');
+            }
 
             timerInterval = setInterval(() => {
                 elapsedTimeInSeconds = Math.floor((new Date() - startTime) / 1000);
-                const hrs = Math.floor(elapsedTimeInSeconds / 3600).toString().padStart(2, '0');
-                const mins = Math.floor((elapsedTimeInSeconds % 3600) / 60).toString().padStart(2, '0');
-                const secs = (elapsedTimeInSeconds % 60).toString().padStart(2, '0');
-                document.getElementById('chrono-display').innerText = `${hrs}:${mins}:${secs}`;
+                if (isAdmin) {
+                    const hrs = Math.floor(elapsedTimeInSeconds / 3600).toString().padStart(2, '0');
+                    const mins = Math.floor((elapsedTimeInSeconds % 3600) / 60).toString().padStart(2, '0');
+                    const secs = (elapsedTimeInSeconds % 60).toString().padStart(2, '0');
+                    document.getElementById('chrono-display').innerText = `${hrs}:${mins}:${secs}`;
+                }
             }, 1000);
         }
 
@@ -260,7 +270,7 @@
             document.getElementById('f-peso-in').value = "";
             document.getElementById('f-peso-dinamico-input').value = "";
             document.getElementById('chrono-display').innerText = "00:00:00";
-            document.getElementById('chrono-display').className = "text-5xl font-mono font-black text-slate-500 block mb-4";
+            document.getElementById('chrono-display').classList.add('hidden');
             document.getElementById('btn-start').classList.remove('hidden');
             document.getElementById('btn-stop').classList.add('hidden');
             document.getElementById('f-step-2').classList.add('hidden');
@@ -295,186 +305,205 @@
                 headers: { "Content-Type": "text/plain;charset=utf-8" }, 
                 body: JSON.stringify(payload) 
             })
-            .then(() => {
-                alert("✅ ¡Proceso de frutas registrado y guardado exitosamente!");
-                resetFrutasForm();
-                fetchDataFromCloud(); 
-                switchView('historial'); 
+            .then(res => res.json())
+            .then(resData => {
+                if(resData && resData.status === "error") {
+                    alert("❌ " + resData.message);
+                } else {
+                    alert("✅ ¡Proceso de frutas registrado y guardado exitosamente!");
+                    resetFrutasForm();
+                    fetchDataFromCloud(); 
+                    switchView('historial'); 
+                }
             })
-            .catch(err => { console.error(err); alert("❌ Error al guardar."); });
-    }
-
-    function renderEmpaqueSelect() {
-        const select = document.getElementById('e-pedido-select');
-        select.innerHTML = '<option value="">-- Seleccionar Lote --</option>';
-        pedidosPendientes.filter(p => p.visibleApp === "SI" && p.estadoEmpaqueGlobal !== "Empacado Total").forEach(p => { 
-            select.innerHTML += `<option value="${p.id}">${p.nombre} (${p.fruta})</option>`; 
-        });
-    }
-
-    function actualizarInfoEmpaque() {
-        const idPed = document.getElementById('e-pedido-select').value;
-        const box = document.getElementById('e-info-box');
-        if(!idPed) { box.classList.add('hidden'); return; }
-        
-        const lote = pedidosPendientes.find(p => p.id === idPed);
-        if(lote) {
-            document.getElementById('e-info-status').innerText = lote.estadoFrutas;
-            box.classList.remove('hidden');
+            .catch(err => { console.error(err); alert("❌ Error de red al guardar."); });
         }
-    }
 
-    function submitEmpaque() {
-        const idPed = document.getElementById('e-pedido-select').value;
-        const lote = pedidosPendientes.find(p => p.id === idPed);
-        const cajas = document.getElementById('e-cajas').value;
-        
-        if(!lote || !cajas) { alert("⚠️ Seleccione un lote y asigne una cantidad de cajas."); return; }
-
-        const payload = {
-            action: "registroEmpaque",
-            idPedido: idPed,
-            nombrePedido: lote.nombre,
-            frutaTipo: lote.fruta,
-            fechaEmpaque: new Date().toLocaleDateString('es-ES'),
-            cajas: cajas,
-            estadoEmpaque: document.getElementById('e-estado-cierre').value
-        };
-        
-        document.getElementById('global-status').innerText = "⏳ Guardando Empaque...";
-        
-        fetch(GOOGLE_SHEETS_URL, { 
-            method: "POST", 
-            headers: { "Content-Type": "text/plain;charset=utf-8" }, 
-            body: JSON.stringify(payload) 
-        })
-        .then(() => { 
-            alert("✅ ¡Empaque registrado exitosamente!"); 
-            document.getElementById('e-cajas').value = "";
-            document.getElementById('e-pedido-select').value = "";
-            document.getElementById('e-info-box').classList.add('hidden');
-            fetchDataFromCloud(); 
-            switchView('historial'); 
-        });
-    }
-
-    function renderMobileHistory() {
-        const container = document.getElementById('cards-container'); 
-        container.innerHTML = "";
-        const filtrado = historialCompleto.filter(i => i.visibleApp === "SI");
-        if (filtrado.length === 0) { container.innerHTML = `<p class="text-center text-xs text-slate-500 py-4">No hay lotes activos.</p>`; return; }
-        
-        [...filtrado].reverse().forEach(p => {
-            let frutaEstilos = p.estadoFrutas === "Proceso Completo" 
-                ? { bg: "bg-emerald-950/40", border: "border-emerald-700/50", text: "text-emerald-400", lightText: "text-emerald-200" }
-                : { bg: "bg-amber-950/40", border: "border-amber-700/50", text: "text-amber-400", lightText: "text-amber-200" };
-
-            let empaqueEstilos = p.estadoEmpaqueGlobal === "Empacado Total"
-                ? { bg: "bg-emerald-950/40", border: "border-emerald-700/50", text: "text-emerald-400", lightText: "text-emerald-200" }
-                : (p.estadoEmpaqueGlobal === "Empacado Parcial"
-                    ? { bg: "bg-amber-950/40", border: "border-amber-700/50", text: "text-amber-400", lightText: "text-amber-200" }
-                    : { bg: "bg-slate-900/60", border: "border-slate-700/50", text: "text-slate-400", lightText: "text-slate-300" });
-
-            const card = document.createElement('div');
-            card.className = "bg-slate-800 p-4 rounded-xl border border-slate-700/70 shadow-xl text-xs space-y-3";
-            card.innerHTML = `
-                <div class="flex justify-between border-b border-slate-700 pb-2">
-                    <span class="font-mono bg-slate-900 px-2 py-0.5 rounded text-slate-400 font-bold tracking-wider">${p.id}</span>
-                    <span class="font-black text-slate-300 uppercase tracking-wide">${p.fruta}</span>
-                </div>
-                <div>
-                    <h4 class="text-sm font-black text-slate-100">${p.nombre}</h4>
-                    <p class="text-[10px] text-slate-400 mt-0.5">Fecha: ${p.fecha}</p>
-                </div>
-                <div class="grid grid-cols-2 gap-3 pt-1">
-                    <div class="${frutaEstilos.bg} border ${frutaEstilos.border} p-2.5 rounded-xl text-center">
-                        <span class="block text-[9px] uppercase font-black tracking-wider ${frutaEstilos.text} mb-1">🍓 Frutas</span>
-                        <span class="font-bold ${frutaEstilos.lightText}">${p.estadoFrutas}</span>
-                    </div>
-                    <div class="${empaqueEstilos.bg} border ${empaqueEstilos.border} p-2.5 rounded-xl text-center">
-                        <span class="block text-[9px] uppercase font-black tracking-wider ${empaqueEstilos.text} mb-1">📦 Empaque</span>
-                        <span class="font-bold ${empaqueEstilos.lightText}">${p.estadoEmpaqueGlobal}</span>
-                    </div>
-                </div>`;
-            container.appendChild(card);
-        });
-    }
-
-    function promptAdmin() {
-        if (isAdmin) {
-            isAdmin = false;
-            document.getElementById('g-box-catalogo').classList.add('hidden');
-            document.getElementById('g-box-gestion-ordenes').classList.add('hidden');
-            document.getElementById('admin-toggle-btn').innerText = "🔑 Gerente";
-            document.getElementById('admin-toggle-btn').classList.replace('bg-rose-600', 'bg-slate-700');
-        } else {
-            let pass = prompt("Ingrese contraseña de Gerente:");
-            if (pass === GERENTE_PASSWORD) {
-                isAdmin = true;
-                document.getElementById('g-box-catalogo').classList.remove('hidden');
-                document.getElementById('g-box-gestion-ordenes').classList.remove('hidden');
-                document.getElementById('admin-toggle-btn').innerText = "🔒 Cerrar";
-                document.getElementById('admin-toggle-btn').classList.replace('bg-slate-700', 'bg-rose-600');
-                renderCatalog();
-            } else { alert("Contraseña incorrecta."); }
+        function renderEmpaqueSelect() {
+            const select = document.getElementById('e-pedido-select');
+            select.innerHTML = '<option value="">-- Seleccionar Lote --</option>';
+            pedidosPendientes.filter(p => p.visibleApp === "SI" && p.estadoEmpaqueGlobal !== "Empacado Total").forEach(p => { 
+                select.innerHTML += `<option value="${p.id}">${p.nombre} (${p.fruta})</option>`; 
+            });
         }
-    }
 
-    function renderCatalog() {
-        const list = document.getElementById('catalog-list'); list.innerHTML = "";
-        frutasCatalog.forEach((f, i) => { list.innerHTML += `<li class="flex justify-between bg-slate-900 p-2 rounded"><span>${f}</span> <button onclick="removeFruta(${i})" class="text-rose-500 font-bold">X</button></li>`; });
-    }
+        function actualizarInfoEmpaque() {
+            const idPed = document.getElementById('e-pedido-select').value;
+            const box = document.getElementById('e-info-box');
+            if(!idPed) { box.classList.add('hidden'); return; }
+            
+            const lote = pedidosPendientes.find(p => p.id === idPed);
+            if(lote) {
+                document.getElementById('e-info-status').innerText = lote.estadoFrutas;
+                box.classList.remove('hidden');
+            }
+        }
 
-    function addFrutaCatalog() {
-        const val = document.getElementById('new-fruta-input').value;
-        if (val) { frutasCatalog.push(val); document.getElementById('new-fruta-input').value = ""; saveCatalogToCloud(); }
-    }
+        function submitEmpaque() {
+            const idPed = document.getElementById('e-pedido-select').value;
+            const lote = pedidosPendientes.find(p => p.id === idPed);
+            const cajas = document.getElementById('e-cajas').value;
+            
+            if(!lote || !cajas) { alert("⚠️ Seleccione un lote y asigne una cantidad de cajas."); return; }
 
-    function removeFruta(index) { frutasCatalog.splice(index, 1); saveCatalogToCloud(); }
-
-    function saveCatalogToCloud() {
-        fetch(GOOGLE_SHEETS_URL, { 
-            method: "POST", 
-            headers: { "Content-Type": "text/plain;charset=utf-8" }, 
-            body: JSON.stringify({ action: "updateOptions", options: frutasCatalog }) 
-        }).then(() => { renderCatalog(); renderFrutasSelect(); });
-    }
-
-    function renderFrutasSelect() { 
-        const sel = document.getElementById('f-fruta'); sel.innerHTML = ''; 
-        frutasCatalog.forEach(f => sel.innerHTML += `<option value="${f}">${f}</option>`); 
-    }
-
-    function renderParcialesSelect() { 
-        const sel = document.getElementById('f-pedido-parcial-select'); 
-        sel.innerHTML = '<option value="">- Seleccione -</option>'; 
-        pedidosParciales.filter(p=>p.visibleApp==="SI").forEach(p => sel.innerHTML += `<option value="${p.id}">${p.nombre}</option>`); 
-    }
-
-    function renderGerenteLoteSelect() { 
-        const sel = document.getElementById('g-lote-select'); sel.innerHTML = '<option value=""></option>'; 
-        historialCompleto.forEach(p => sel.innerHTML += `<option value="${p.id}">${p.id} - ${p.nombre}</option>`); 
-    }
-
-    function gerenteOcultarLoteApp() { 
-        if(confirm("¿Ocultar este lote de la App? (Seguirá en el Excel)")) {
-            fetch(GOOGLE_SHEETS_URL, {
-                method:"POST", 
+            const payload = {
+                action: "registroEmpaque",
+                idPedido: idPed,
+                nombrePedido: lote.nombre,
+                frutaTipo: lote.fruta,
+                fechaEmpaque: new Date().toLocaleDateString('es-ES'),
+                cajas: cajas,
+                estadoEmpaque: document.getElementById('e-estado-cierre').value
+            };
+            
+            document.getElementById('global-status').innerText = "⏳ Guardando Empaque...";
+            
+            fetch(GOOGLE_SHEETS_URL, { 
+                method: "POST", 
                 headers: { "Content-Type": "text/plain;charset=utf-8" }, 
-                body:JSON.stringify({action:"ocultarLoteManual", idPedido:document.getElementById('g-lote-select').value})
-            }).then(()=>fetchDataFromCloud()); 
+                body: JSON.stringify(payload) 
+            })
+            .then(res => res.json())
+            .then(resData => { 
+                if(resData && resData.status === "error") {
+                    alert("❌ " + resData.message);
+                } else {
+                    alert("✅ ¡Empaque registrado exitosamente!"); 
+                    document.getElementById('e-cajas').value = "";
+                    document.getElementById('e-pedido-select').value = "";
+                    document.getElementById('e-info-box').classList.add('hidden');
+                    fetchDataFromCloud(); 
+                    switchView('historial'); 
+                }
+            })
+            .catch(err => { console.error(err); alert("❌ Error al guardar empaque."); });
         }
-    }
 
-    function gerenteBorrarLoteTotal() { 
-        if(confirm("¡Peligro! ¿Borrar este lote de todas las pestañas de la base de datos?")) {
-            fetch(GOOGLE_SHEETS_URL, {
-                method:"POST", 
-                headers: { "Content-Type": "text/plain;charset=utf-8" }, 
-                body:JSON.stringify({action:"deleteLote", idPedido:document.getElementById('g-lote-select').value})
-            }).then(()=>fetchDataFromCloud()); 
+        function renderMobileHistory() {
+            const container = document.getElementById('cards-container'); 
+            container.innerHTML = "";
+            const filtrado = historialCompleto.filter(i => i.visibleApp === "SI");
+            if (filtrado.length === 0) { container.innerHTML = `<p class="text-center text-xs text-slate-500 py-4">No hay lotes activos.</p>`; return; }
+            
+            [...filtrado].reverse().forEach(p => {
+                let frutaEstilos = p.estadoFrutas === "Proceso Completo" 
+                    ? { bg: "bg-emerald-950/40", border: "border-emerald-700/50", text: "text-emerald-400", lightText: "text-emerald-200" }
+                    : { bg: "bg-amber-950/40", border: "border-amber-700/50", text: "text-amber-400", lightText: "text-amber-200" };
+
+                let empaqueEstilos = p.estadoEmpaqueGlobal === "Empacado Total"
+                    ? { bg: "bg-emerald-950/40", border: "border-emerald-700/50", text: "text-emerald-400", lightText: "text-emerald-200" }
+                    : (p.estadoEmpaqueGlobal === "Empacado Parcial"
+                        ? { bg: "bg-amber-950/40", border: "border-amber-700/50", text: "text-amber-400", lightText: "text-amber-200" }
+                        : { bg: "bg-slate-900/60", border: "border-slate-700/50", text: "text-slate-400", lightText: "text-slate-300" });
+
+                const card = document.createElement('div');
+                card.className = "bg-slate-800 p-4 rounded-xl border border-slate-700/70 shadow-xl text-xs space-y-3";
+                card.innerHTML = `
+                    <div class="flex justify-between border-b border-slate-700 pb-2">
+                        <span class="font-mono bg-slate-900 px-2 py-0.5 rounded text-slate-400 font-bold tracking-wider">${p.id}</span>
+                        <span class="font-black text-slate-300 uppercase tracking-wide">${p.fruta}</span>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-black text-slate-100">${p.nombre}</h4>
+                        <p class="text-[10px] text-slate-400 mt-0.5">Fecha: ${p.fecha}</p>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 pt-1">
+                        <div class="${frutaEstilos.bg} border ${frutaEstilos.border} p-2.5 rounded-xl text-center">
+                            <span class="block text-[9px] uppercase font-black tracking-wider ${frutaEstilos.text} mb-1">🍓 Frutas</span>
+                            <span class="font-bold ${frutaEstilos.lightText}">${p.estadoFrutas}</span>
+                        </div>
+                        <div class="${empaqueEstilos.bg} border ${empaqueEstilos.border} p-2.5 rounded-xl text-center">
+                            <span class="block text-[9px] uppercase font-black tracking-wider ${empaqueEstilos.text} mb-1">📦 Empaque</span>
+                            <span class="font-bold ${empaqueEstilos.lightText}">${p.estadoEmpaqueGlobal}</span>
+                        </div>
+                    </div>`;
+                container.appendChild(card);
+            });
         }
-    }
-</script>
+
+        function promptAdmin() {
+            if (isAdmin) {
+                isAdmin = false;
+                document.getElementById('g-box-catalogo').classList.add('hidden');
+                document.getElementById('g-box-gestion-ordenes').classList.add('hidden');
+                document.getElementById('chrono-display').classList.add('hidden');
+                document.getElementById('admin-toggle-btn').innerText = "🔑 Gerente";
+                document.getElementById('admin-toggle-btn').classList.replace('bg-rose-600', 'bg-slate-700');
+            } else {
+                let pass = prompt("Ingrese contraseña de Gerente:");
+                if (pass === GERENTE_PASSWORD) {
+                    isAdmin = true;
+                    document.getElementById('g-box-catalogo').classList.remove('hidden');
+                    document.getElementById('g-box-gestion-ordenes').classList.remove('hidden');
+                    
+                    // Si el cronómetro estaba corriendo tras bambalinas, se lo muestra inmediatamente al gerente
+                    if (timerInterval && startTime) {
+                        document.getElementById('chrono-display').classList.remove('hidden');
+                        document.getElementById('chrono-display').className = "text-5xl font-mono font-black text-emerald-400 block mb-4";
+                    }
+                    
+                    document.getElementById('admin-toggle-btn').innerText = "🔒 Cerrar";
+                    document.getElementById('admin-toggle-btn').classList.replace('bg-slate-700', 'bg-rose-600');
+                    renderCatalog();
+                } else { alert("Contraseña incorrecta."); }
+            }
+        }
+
+        function renderCatalog() {
+            const list = document.getElementById('catalog-list'); list.innerHTML = "";
+            frutasCatalog.forEach((f, i) => { list.innerHTML += `<li class="flex justify-between bg-slate-900 p-2 rounded"><span>${f}</span> <button onclick="removeFruta(${i})" class="text-rose-500 font-bold">X</button></li>`; });
+        }
+
+        function addFrutaCatalog() {
+            const val = document.getElementById('new-fruta-input').value;
+            if (val) { frutasCatalog.push(val); document.getElementById('new-fruta-input').value = ""; saveCatalogToCloud(); }
+        }
+
+        function removeFruta(index) { frutasCatalog.splice(index, 1); saveCatalogToCloud(); }
+
+        function saveCatalogToCloud() {
+            fetch(GOOGLE_SHEETS_URL, { 
+                method: "POST", 
+                headers: { "Content-Type": "text/plain;charset=utf-8" }, 
+                body: JSON.stringify({ action: "updateOptions", options: frutasCatalog }) 
+            }).then(() => { renderCatalog(); renderFrutasSelect(); });
+        }
+
+        function renderFrutasSelect() { 
+            const sel = document.getElementById('f-fruta'); sel.innerHTML = ''; 
+            frutasCatalog.forEach(f => sel.innerHTML += `<option value="${f}">${f}</option>`); 
+        }
+
+        function renderParcialesSelect() { 
+            const sel = document.getElementById('f-pedido-parcial-select'); 
+            sel.innerHTML = '<option value="">- Seleccione -</option>'; 
+            pedidosParciales.filter(p=>p.visibleApp==="SI").forEach(p => sel.innerHTML += `<option value="${p.id}">${p.nombre}</option>`); 
+        }
+
+        function renderGerenteLoteSelect() { 
+            const sel = document.getElementById('g-lote-select'); sel.innerHTML = '<option value=""></option>'; 
+            historialCompleto.forEach(p => sel.innerHTML += `<option value="${p.id}">${p.id} - ${p.nombre}</option>`); 
+        }
+
+        function gerenteOcultarLoteApp() { 
+            if(confirm("¿Ocultar este lote de la App? (Seguirá en el Excel)")) {
+                fetch(GOOGLE_SHEETS_URL, {
+                    method:"POST", 
+                    headers: { "Content-Type": "text/plain;charset=utf-8" }, 
+                    body:JSON.stringify({action:"ocultarLoteManual", idPedido:document.getElementById('g-lote-select').value})
+                }).then(()=>fetchDataFromCloud()); 
+            }
+        }
+
+        function gerenteBorrarLoteTotal() { 
+            if(confirm("¡Peligro! ¿Borrar este lote de todas las pestañas de la base de datos?")) {
+                fetch(GOOGLE_SHEETS_URL, {
+                    method:"POST", 
+                    headers: { "Content-Type": "text/plain;charset=utf-8" }, 
+                    body:JSON.stringify({action:"deleteLote", idPedido:document.getElementById('g-lote-select').value})
+                }).then(()=>fetchDataFromCloud()); 
+            }
+        }
+    </script>
 </body>
 </html>
