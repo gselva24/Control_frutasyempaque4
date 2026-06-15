@@ -162,6 +162,7 @@
     </nav>
 
     <script>
+        // SUSTITUIR CON TU URL DE APPS SCRIPT PUBLICADA
         const GOOGLE_SHEETS_URL = "https://script.google.com/macros/s/AKfycbxXmVASphOh4iL101HAbp4uGVZufDwaXRS7yXGZNG74Y_nDOb9vmaFSi3c9cmldJPm40A/exec"; 
         const GERENTE_PASSWORD = "PRODUCCION2026";
 
@@ -239,7 +240,6 @@
             document.getElementById('btn-start').classList.add('hidden');
             document.getElementById('btn-stop').classList.remove('hidden');
             
-            // Corrección estructural de visibilidad
             if (isAdmin) {
                 document.getElementById('chrono-display').classList.remove('hidden');
             } else {
@@ -249,7 +249,6 @@
             timerInterval = setInterval(() => {
                 elapsedTimeInSeconds = Math.floor((new Date() - startTime) / 1000);
                 
-                // Solo realizamos operaciones en el DOM del reloj si el usuario es Gerente
                 if (isAdmin) {
                     const hrs = Math.floor(elapsedTimeInSeconds / 3600).toString().padStart(2, '0');
                     const mins = Math.floor((elapsedTimeInSeconds % 3600) / 60).toString().padStart(2, '0');
@@ -270,7 +269,7 @@
             document.getElementById('f-peso-in').value = "";
             document.getElementById('f-peso-dinamico-input').value = "";
             document.getElementById('chrono-display').innerText = "00:00:00";
-            document.getElementById('chrono-display').classList.add('hidden'); // Asegurar ocultamiento al limpiar
+            document.getElementById('chrono-display').classList.add('hidden'); 
             document.getElementById('btn-start').classList.remove('hidden');
             document.getElementById('btn-stop').classList.add('hidden');
             document.getElementById('f-step-2').classList.add('hidden');
@@ -310,7 +309,7 @@
                 if(resData && resData.status === "error") {
                     alert("❌ " + resData.message);
                 } else {
-                    alert("✅ ¡Proceso de frutas registrado y guardado exitosamente!");
+                    alert("✅ ¡Proceso guardado exitosamente!");
                     resetFrutasForm();
                     fetchDataFromCloud(); 
                     switchView('historial'); 
@@ -323,7 +322,7 @@
             const select = document.getElementById('e-pedido-select');
             select.innerHTML = '<option value="">-- Seleccionar Lote --</option>';
             pedidosPendientes.filter(p => p.visibleApp === "SI" && p.estadoEmpaqueGlobal !== "Empacado Total").forEach(p => { 
-                select.innerHTML += `<option value="${p.id}">${p.nombre} (${p.fruta})</option>`; 
+                select.innerHTML += `<option value="${p.id}">${p.id} - ${p.nombre} (${p.fruta})</option>`; 
             });
         }
 
@@ -400,7 +399,7 @@
                 card.className = "bg-slate-800 p-4 rounded-xl border border-slate-700/70 shadow-xl text-xs space-y-3";
                 card.innerHTML = `
                     <div class="flex justify-between border-b border-slate-700 pb-2">
-                        <span class="font-mono bg-slate-900 px-2 py-0.5 rounded text-slate-400 font-bold tracking-wider">${p.id}</span>
+                        <span class="font-mono bg-slate-900 px-2 py-0.5 rounded text-amber-400 font-bold tracking-wider">${p.id}</span>
                         <span class="font-black text-slate-300 uppercase tracking-wide">${p.fruta}</span>
                     </div>
                     <div>
@@ -426,7 +425,7 @@
                 isAdmin = false;
                 document.getElementById('g-box-catalogo').classList.add('hidden');
                 document.getElementById('g-box-gestion-ordenes').classList.add('hidden');
-                document.getElementById('chrono-display').classList.add('hidden'); // Ocultar si se cierra sesión
+                document.getElementById('chrono-display').classList.add('hidden'); 
                 document.getElementById('admin-toggle-btn').innerText = "🔑 Gerente";
                 document.getElementById('admin-toggle-btn').classList.replace('bg-rose-600', 'bg-slate-700');
             } else {
@@ -436,7 +435,6 @@
                     document.getElementById('g-box-catalogo').classList.remove('hidden');
                     document.getElementById('g-box-gestion-ordenes').classList.remove('hidden');
                     
-                    // Si el cronómetro ya estaba activo, se revela inmediatamente al validar gerencia
                     if (timerInterval && startTime) {
                         document.getElementById('chrono-display').classList.remove('hidden');
                     }
@@ -476,7 +474,7 @@
         function renderParcialesSelect() { 
             const sel = document.getElementById('f-pedido-parcial-select'); 
             sel.innerHTML = '<option value="">- Seleccione -</option>'; 
-            pedidosParciales.filter(p=>p.visibleApp==="SI").forEach(p => sel.innerHTML += `<option value="${p.id}">${p.nombre}</option>`); 
+            pedidosParciales.filter(p=>p.visibleApp==="SI").forEach(p => sel.innerHTML += `<option value="${p.id}">${p.id} - ${p.nombre}</option>`); 
         }
 
         function renderGerenteLoteSelect() { 
